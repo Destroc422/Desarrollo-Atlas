@@ -26,7 +26,6 @@ const productSchema = z.object({
   category: z.string().min(1, "Selecciona una categoría"),
   brand: z.string().trim().min(1, "Escribe una marca"),
   tracking: z.enum(["Individual", "Por cantidad"]),
-  stock: z.coerce.number().int().min(0),
   minimum: z.coerce.number().int().min(0),
   location: z.string().min(1, "Selecciona una ubicación"),
   value: z.coerce.number().min(0),
@@ -94,6 +93,11 @@ type NotificationRecord = { id: string; title: string; description: string; cate
 type QuickOption = string | { label: string; value: string };
 type QuickField = { name: string; label: string; type?: "text" | "email" | "number" | "date" | "datetime-local" | "select" | "textarea"; options?: QuickOption[]; placeholder?: string; min?: number; required?: boolean };
 
+function readPersistentSnapshot<T>(key: string, fallback: T): T {
+  try { const stored = localStorage.getItem(key); return stored ? JSON.parse(stored) as T : fallback; }
+  catch { return fallback; }
+}
+
 const purchaseSeed: PurchaseOrder[] = [
   { code: "OC-2026-0248", vendor: "TechData Colombia", date: "24 oct, 2026", due: "30 oct, 2026", items: "4 productos · 42 unidades", total: "$ 18.420.000", status: "Parcialmente recibida" },
   { code: "OC-2026-0247", vendor: "Compumax S.A.S.", date: "23 oct, 2026", due: "28 oct, 2026", items: "6 productos · 28 unidades", total: "$ 34.890.000", status: "Aprobada" },
@@ -137,15 +141,31 @@ const notificationSeed: NotificationRecord[] = [
   { id: "ntf-04", title: "Orden lista para recibir", description: "OC-2026-0248 tiene mercancía pendiente de ingreso.", category: "Compras", time: "Ayer, 4:36 p. m.", href: "/purchases", read: true },
 ];
 
-function usePersistentValue<T>(key: string, initialValue: T): [T, (nextValue: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try { const stored = localStorage.getItem(key); return stored ? JSON.parse(stored) as T : initialValue; }
-    catch { return initialValue; }
-  });
-  const save = (nextValue: T) => {
-    try { localStorage.setItem(key, JSON.stringify(nextValue)); } catch { /* Keep the current session usable if storage is unavailable. */ }
-    setValue(nextValue);
+function usePersistentValue<T>(key: string, initialValue: T): [T, (nextValue: T | ((current: T) => T)) => void] {
+  const [value, setValue] = useState<T>(() => readPersistentSnapshot(key, initialValue));
+  const save = (nextValue: T | ((current: T) => T)) => {
+    const current = readPersistentSnapshot(key, value);
+    const resolved = typeof nextValue === "function" ? (nextValue as (current: T) => T)(current) : nextValue;
+    try { localStorage.setItem(key, JSON.stringify(resolved)); } catch { /* Keep the current session usable if storage is unavailable. */ }
+    setValue(resolved);
+    window.dispatchEvent(new CustomEvent("atlas:persistent-value", { detail: { key, value: resolved } }));
   };
+  useEffect(() => {
+    const syncInWindow = (event: Event) => {
+      const detail = (event as CustomEvent<{ key: string; value: T }>).detail;
+      if (detail?.key === key) setValue(detail.value);
+    };
+    const syncAcrossTabs = (event: StorageEvent) => {
+      if (event.key !== key) return;
+      try { setValue(event.newValue ? JSON.parse(event.newValue) as T : initialValue); } catch { setValue(initialValue); }
+    };
+    window.addEventListener("atlas:persistent-value", syncInWindow);
+    window.addEventListener("storage", syncAcrossTabs);
+    return () => {
+      window.removeEventListener("atlas:persistent-value", syncInWindow);
+      window.removeEventListener("storage", syncAcrossTabs);
+    };
+  }, [initialValue, key]);
   return [value, save];
 }
 
@@ -241,10 +261,12 @@ function App() {
         date: "Ahora",
         reference: `ING-${newAsset.code}`,
       };
-      await Promise.all([saveAssets([newAsset, ...assets]), saveMovements([movement, ...movements])]);
+      const nextProducts = products.map((item) => item.id === product.id ? { ...item, stock: item.stock + 1, updatedAt: "Ahora" } : item);
+      await Promise.all([saveProducts(nextProducts), saveAssets([newAsset, ...assets]), saveMovements([movement, ...movements])]);
       return newAsset;
     },
     onSuccess: (asset) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["movements"] });
       setModal(null);
@@ -254,6 +276,10 @@ function App() {
   const receiveMutation = useMutation({
     mutationFn: async ({ lines, reference }: ReceiptSubmission) => {
       const [products, assets, movements] = await Promise.all([getProducts(), getAssets(), getMovements()]);
+      const normalizedReference = reference.trim().toLocaleLowerCase();
+      if (movements.some((movement) => movement.reference.trim().toLocaleLowerCase() === normalizedReference)) {
+        throw new Error("Esa referencia de recepción ya fue registrada.");
+      }
       let nextProducts = [...products];
       const nextAssets = [...assets];
       const nextMovements = [...movements];
@@ -324,7 +350,7 @@ function App() {
     setGlobalSearch("");
   };
   const submitProduct = (values: ProductValues) => productMutation.mutate({
-    id: `p-${Date.now()}`, ...values, updatedAt: "Ahora",
+    id: `p-${Date.now()}`, ...values, stock: 0, updatedAt: "Ahora",
   });
   const submitReceipt = (submission: ReceiptSubmission) => receiveMutation.mutate(submission);
   const notify = (title: string, detail?: string) => setToast({ title, detail });
@@ -555,19 +581,20 @@ function PurchasesPage({ onReceive, onToast }: { onReceive: () => void; onToast:
   const pendingApproval = orders.filter((order) => order.status === "Pendiente de aprobación").length;
   const openOrders = orders.filter((order) => order.status !== "Recibida").length;
   const saveOrder = (values: Record<string, string>) => {
-    const sequence = Math.max(0, ...orders.map((order) => Number(order.code.split("-").at(-1)) || 0)) + 1;
+    const currentOrders = readPersistentSnapshot("atlas.purchases", orders);
+    const sequence = Math.max(0, ...currentOrders.map((order) => Number(order.code.split("-").at(-1)) || 0)) + 1;
     const order: PurchaseOrder = {
       code: `OC-${new Date().getFullYear()}-${String(sequence).padStart(4, "0")}`, vendor: values.vendor.trim(),
       date: "Hoy", due: displayDate(values.due), items: values.items.trim(), total: currency(Number(values.total)), status: "Pendiente de aprobación",
     };
-    setOrders([order, ...orders]);
+    setOrders((current) => [order, ...current]);
     setCreating(false);
     onToast("Orden creada", `${order.code} · ${order.vendor}`);
   };
   const advanceOrder = (order: PurchaseOrder) => {
     const flow = ["Pendiente de aprobación", "Aprobada", "Parcialmente recibida", "Recibida"];
     const nextStatus = flow[Math.min(flow.indexOf(order.status) + 1, flow.length - 1)];
-    setOrders(orders.map((item) => item.code === order.code ? { ...item, status: nextStatus } : item));
+    setOrders((current) => current.map((item) => item.code === order.code ? { ...item, status: nextStatus } : item));
     onToast("Estado actualizado", `${order.code} · ${nextStatus}`);
   };
   return <>
@@ -589,41 +616,76 @@ function AssignmentsPage({ onToast }: { onToast: (title: string, detail?: string
   const availableAssets = assets.filter((asset) => asset.status === "Disponible");
   const filtered = rows.filter((row) => (status === "Todos los estados" || row.status === status) && `${row.ref} ${row.asset} ${row.recipient} ${row.group}`.toLowerCase().includes(search.toLowerCase()));
   const createAssignment = async (values: Record<string, string>) => {
-    const asset = assets.find((item) => item.id === values.assetId && item.status === "Disponible");
+    const currentAssets = await getAssets();
+    const asset = currentAssets.find((item) => item.id === values.assetId && item.status === "Disponible");
     if (!asset) { onToast("Activo no disponible", "Actualiza la lista y elige un activo que esté libre."); return; }
-    const refNumber = Math.max(0, ...rows.map((row) => Number(row.ref.split("-").at(-1)) || 0)) + 1;
+    const currentRows = readPersistentSnapshot("atlas.assignments", rows);
+    if (currentRows.some((row) => row.assetId === asset.id && row.status !== "Devuelta")) {
+      onToast("La custodia ya existe", `${asset.name} ya tiene una asignación abierta.`);
+      return;
+    }
+    const refNumber = Math.max(0, ...currentRows.map((row) => Number(row.ref.split("-").at(-1)) || 0)) + 1;
     const row: AssignmentRow = { ref: `ASI-${new Date().getFullYear()}-${String(refNumber).padStart(4, "0")}`, asset: asset.name, assetId: asset.id, recipient: values.recipient.trim(), group: values.group.trim(), date: "Ahora", status: "Activa" };
+    const movement: Movement = { id: `m-${Date.now()}`, type: "Asignación", item: asset.name, code: asset.code, quantity: "1 activo", from: asset.location, to: `${row.recipient} · ${row.group}`, actor: "Mariana Torres", date: "Ahora", reference: row.ref };
+    const currentMovements = await getMovements();
     await Promise.all([
-      saveAssets(assets.map((item) => item.id === asset.id ? { ...item, status: "Asignado", assignedTo: row.recipient } : item)),
-      saveMovements([{ id: `m-${Date.now()}`, type: "Asignación", item: asset.name, code: asset.code, quantity: "1 activo", from: asset.location, to: `${row.recipient} · ${row.group}`, actor: "Mariana Torres", date: "Ahora", reference: row.ref }, ...await getMovements()]),
+      saveAssets(currentAssets.map((item) => item.id === asset.id ? { ...item, status: "Asignado", assignedTo: row.recipient } : item)),
+      saveMovements([movement, ...currentMovements]),
     ]);
-    setRows([row, ...rows]);
+    setRows((current) => [row, ...current]);
     queryClient.invalidateQueries({ queryKey: ["assets"] });
     queryClient.invalidateQueries({ queryKey: ["movements"] });
     setCreating(false);
     onToast("Activo asignado", `${asset.name} · ${row.recipient}`);
   };
   const updateAssignment = async (row: AssignmentRow) => {
-    if (row.status === "Devuelta") return;
-    const asset = assets.find((item) => item.id === row.assetId);
+    const persistedRows = readPersistentSnapshot("atlas.assignments", rows);
+    const persistedRow = persistedRows.find((item) => item.ref === row.ref);
+    if (!persistedRow || persistedRow.status === "Devuelta" || persistedRow.status !== row.status) return;
+    row = persistedRow;
+    const currentAssets = await getAssets();
+    const asset = currentAssets.find((item) => item.id === row.assetId);
     const pendingHandover = row.status === "Pendiente de firma" || row.status === "Pendiente de entrega";
     const nextStatus = pendingHandover ? "Activa" : "Devuelta";
-    if (pendingHandover && asset?.status === "Disponible") {
-      await Promise.all([
-        saveAssets(assets.map((item) => item.id === asset.id ? { ...item, status: "Asignado", assignedTo: row.recipient } : item)),
-        saveMovements([{ id: `m-${Date.now()}`, type: "Asignación", item: asset.name, code: asset.code, quantity: "1 activo", from: asset.location, to: `${row.recipient} · ${row.group}`, actor: "Mariana Torres", date: "Ahora", reference: row.ref }, ...await getMovements()]),
-      ]);
-      queryClient.invalidateQueries({ queryKey: ["assets"] });
-      queryClient.invalidateQueries({ queryKey: ["movements"] });
-    } else if (row.status === "Activa" && asset?.status === "Asignado") {
-      await Promise.all([
-        saveAssets(assets.map((item) => item.id === asset.id ? { ...item, status: "Disponible", assignedTo: "—" } : item)),
-        saveMovements([{ id: `m-${Date.now()}`, type: "Devolución", item: asset.name, code: asset.code, quantity: "1 activo", from: row.recipient, to: asset.location, actor: "Mariana Torres", date: "Ahora", reference: `DEV-${row.ref}` }, ...await getMovements()]),
-      ]);
-      queryClient.invalidateQueries({ queryKey: ["assets"] });
-      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    if (pendingHandover && !asset) {
+      onToast("Activo no encontrado", "La asignación sigue pendiente hasta que se encuentre el activo.");
+      return;
     }
-    setRows(rows.map((item) => item.ref === row.ref ? { ...item, status: nextStatus } : item));
+    if (pendingHandover && asset?.status === "Asignado" && asset.assignedTo === row.recipient) {
+      setRows((current) => current.map((item) => item.ref === row.ref ? { ...item, status: "Activa" } : item));
+      onToast("Entrega confirmada", `${row.ref} · ${row.recipient}`);
+      return;
+    }
+    if (pendingHandover && asset?.status !== "Disponible") {
+      onToast("Activo no disponible", `${asset?.name ?? row.asset} ya no está libre para entregar.`);
+      return;
+    }
+    if (pendingHandover && asset) {
+      const movement: Movement = { id: `m-${Date.now()}`, type: "Asignación", item: asset.name, code: asset.code, quantity: "1 activo", from: asset.location, to: `${row.recipient} · ${row.group}`, actor: "Mariana Torres", date: "Ahora", reference: row.ref };
+      const currentMovements = await getMovements();
+      await Promise.all([
+        saveAssets(currentAssets.map((item) => item.id === asset.id ? { ...item, status: "Asignado", assignedTo: row.recipient } : item)),
+        saveMovements([movement, ...currentMovements]),
+      ]);
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    } else if (row.status === "Activa") {
+      if (!asset || asset.status !== "Asignado" || asset.assignedTo !== row.recipient) {
+        onToast("No se puede registrar la devolución", "La custodia del activo no coincide con esta asignación.");
+        return;
+      }
+      const movement: Movement = { id: `m-${Date.now()}`, type: "Devolución", item: asset.name, code: asset.code, quantity: "1 activo", from: row.recipient, to: asset.location, actor: "Mariana Torres", date: "Ahora", reference: `DEV-${row.ref}` };
+      const currentMovements = await getMovements();
+      await Promise.all([
+        saveAssets(currentAssets.map((item) => item.id === asset.id ? { ...item, status: "Disponible", assignedTo: "—" } : item)),
+        saveMovements([movement, ...currentMovements]),
+      ]);
+      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["movements"] });
+    } else {
+      return;
+    }
+    setRows((current) => current.map((item) => item.ref === row.ref ? { ...item, status: nextStatus } : item));
     onToast("Asignación actualizada", `${row.ref} · ${nextStatus}`);
   };
   return <>
@@ -645,14 +707,22 @@ function InspectionsPage({ onToast }: { onToast: (title: string, detail?: string
   const scheduleInspection = (values: Record<string, string>) => {
     const asset = assets.find((item) => item.id === values.assetId);
     if (!asset) { onToast("Selecciona un activo", "El activo no está disponible para programar."); return; }
-    const row: InspectionRow = { id: `INS-${Date.now()}`, asset: asset.name, code: asset.code, type: values.type, responsible: values.responsible.trim(), due: displayDate(values.due), status: "Programada" };
-    setRows([row, ...rows]);
+    const due = new Date(`${values.due}T12:00:00`);
+    if (Number.isNaN(due.getTime())) { onToast("Fecha inválida", "Selecciona una fecha válida para la inspección."); return; }
+    const isOverdue = due < new Date(new Date().toDateString());
+    const currentRows = readPersistentSnapshot("atlas.inspections", rows);
+    if (currentRows.some((item) => item.code === asset.code && item.type === values.type && item.status !== "Realizada")) {
+      onToast("Inspección ya programada", `${asset.name} ya tiene una revisión abierta de este tipo.`);
+      return;
+    }
+    const row: InspectionRow = { id: `INS-${Date.now()}`, asset: asset.name, code: asset.code, type: values.type, responsible: values.responsible.trim(), due: displayDate(values.due), status: isOverdue ? "Vencida" : "Programada" };
+    setRows((current) => [row, ...current]);
     setCreating(false);
-    onToast("Inspección programada", `${asset.name} · ${row.due}`);
+    onToast(isOverdue ? "Inspección creada como vencida" : "Inspección programada", `${asset.name} · ${row.due}`);
   };
   const completeInspection = (row: InspectionRow) => {
     if (row.status === "Realizada") return;
-    setRows(rows.map((item) => (item.id ?? item.code) === (row.id ?? row.code) ? { ...item, status: "Realizada" } : item));
+    setRows((current) => current.map((item) => (item.id ?? item.code) === (row.id ?? row.code) ? { ...item, status: "Realizada" } : item));
     onToast("Inspección completada", `${row.asset} · ${row.type}`);
   };
   return <>
@@ -673,30 +743,47 @@ function MaintenancePage({ onToast }: { onToast: (title: string, detail?: string
   const [creating, setCreating] = useState(false);
   const filtered = rows.filter((row) => (status === "Todos los estados" || row.status === status) && `${row.ref} ${row.asset} ${row.issue} ${row.owner}`.toLowerCase().includes(search.toLowerCase()));
   const createWorkOrder = async (values: Record<string, string>) => {
-    const asset = assets.find((item) => item.id === values.assetId);
+    const currentAssets = await getAssets();
+    const asset = currentAssets.find((item) => item.id === values.assetId);
     if (!asset && !values.assetName.trim()) { onToast("Selecciona un activo", "Elige un activo registrado o escribe el nombre de uno externo."); return; }
-    const number = Math.max(0, ...rows.map((row) => Number(row.ref.split("-").at(-1)) || 0)) + 1;
+    const currentRows = readPersistentSnapshot("atlas.workOrders", rows);
+    if (asset && currentRows.some((row) => row.assetId === asset.id && row.status !== "Completado")) {
+      onToast("Ya existe una orden abierta", `${asset.name} tiene una intervención pendiente.`);
+      return;
+    }
+    const number = Math.max(0, ...currentRows.map((row) => Number(row.ref.split("-").at(-1)) || 0)) + 1;
     const row: WorkOrder = {
       ref: `OT-${new Date().getFullYear()}-${String(number).padStart(4, "0")}`, asset: asset?.name ?? values.assetName.trim(), assetId: asset?.id,
       previousStatus: asset?.status, previousAssignee: asset?.assignedTo, issue: values.issue.trim(), owner: values.owner.trim(), scheduled: displayDate(values.scheduled),
       status: "Programado", cost: Number(values.cost) || 0,
     };
     if (asset) {
-      await saveAssets(assets.map((item) => item.id === asset.id ? { ...item, status: "En mantenimiento" } : item));
+      await saveAssets(currentAssets.map((item) => item.id === asset.id ? { ...item, status: "En mantenimiento", assignedTo: "Mantenimiento" } : item));
       queryClient.invalidateQueries({ queryKey: ["assets"] });
     }
-    setRows([row, ...rows]);
+    setRows((current) => [row, ...current]);
     setCreating(false);
     onToast("Orden de trabajo creada", `${row.ref} · ${row.asset}`);
   };
   const advanceWorkOrder = async (row: WorkOrder) => {
+    if (row.status === "Completado") return;
     const flow = ["Programado", "En proceso", "Esperando repuesto", "Completado"];
-    const nextStatus = flow[Math.min(flow.indexOf(row.status) + 1, flow.length - 1)];
+    const statusIndex = flow.indexOf(row.status);
+    if (statusIndex < 0) return;
+    const nextStatus = flow[Math.min(statusIndex + 1, flow.length - 1)];
     if (nextStatus === "Completado" && row.assetId && row.previousStatus) {
-      await saveAssets(assets.map((item) => item.id === row.assetId ? { ...item, status: row.previousStatus!, assignedTo: row.previousAssignee ?? item.assignedTo } : item));
+      const currentAssets = await getAssets();
+      const currentAsset = currentAssets.find((item) => item.id === row.assetId);
+      const currentRows = readPersistentSnapshot("atlas.workOrders", rows);
+      const currentOrder = currentRows.find((item) => item.ref === row.ref);
+      if (!currentOrder || currentOrder.status !== row.status) return;
+      const otherOpenOrder = currentRows.some((item) => item.ref !== row.ref && item.assetId === row.assetId && item.status !== "Completado");
+      if (currentAsset?.status === "En mantenimiento" && !otherOpenOrder) {
+        await saveAssets(currentAssets.map((item) => item.id === row.assetId ? { ...item, status: row.previousStatus!, assignedTo: row.previousAssignee ?? "—" } : item));
+      }
       queryClient.invalidateQueries({ queryKey: ["assets"] });
     }
-    setRows(rows.map((item) => item.ref === row.ref ? { ...item, status: nextStatus } : item));
+    setRows((current) => current.map((item) => item.ref === row.ref ? { ...item, status: nextStatus } : item));
     onToast("Orden actualizada", `${row.ref} · ${nextStatus}`);
   };
   const activeCount = rows.filter((row) => row.status !== "Completado").length;
@@ -741,13 +828,13 @@ function OrganizationPage({ onToast }: { onToast: (title: string, detail?: strin
   const [assignments] = usePersistentValue("atlas.assignments", assignmentSeed);
   const [modal, setModal] = useState<"group" | "location" | null>(null);
   const createGroup = (values: Record<string, string>) => {
-    if (groups.some((group) => group.name.toLowerCase() === values.name.trim().toLowerCase())) { onToast("Grupo existente", values.name); return; }
+    if (readPersistentSnapshot("atlas.groups", groups).some((group) => group.name.trim().toLowerCase() === values.name.trim().toLowerCase())) { onToast("Grupo existente", values.name); return; }
     const group: OrganizationGroup = { id: `grp-${Date.now()}`, name: values.name.trim(), lead: values.lead.trim(), members: Number(values.members) || 1 };
-    setGroups([group, ...groups]); setModal(null); onToast("Grupo creado", group.name);
+    setGroups((current) => [group, ...current]); setModal(null); onToast("Grupo creado", group.name);
   };
   const createLocation = (values: Record<string, string>) => {
-    if (settings.locations.some((location) => location.toLowerCase() === values.name.trim().toLowerCase())) { onToast("Ubicación existente", values.name); return; }
-    setSettings({ ...settings, locations: [...settings.locations, values.name.trim()] }); setModal(null); onToast("Ubicación creada", values.name);
+    if (readPersistentSnapshot("atlas.settings", settings).locations.some((location) => location.trim().toLowerCase() === values.name.trim().toLowerCase())) { onToast("Ubicación existente", values.name); return; }
+    setSettings((current) => ({ ...current, locations: [...current.locations, values.name.trim()] })); setModal(null); onToast("Ubicación creada", values.name);
   };
   return <>
     <PageHeading eyebrow="ESTRUCTURA DE LA ORGANIZACIÓN" title="Organización" description="Administra sedes, grupos y responsables de los activos." actions={<Button variant="primary" icon={Plus} onClick={() => setModal("group")}>Crear grupo</Button>} />
@@ -780,13 +867,13 @@ function NotificationsPage() {
   const unread = notifications.filter((notification) => !notification.read).length;
   const visible = notifications.filter((notification) => filter === "Todas" || (filter === "No leídas" && !notification.read));
   const openNotification = (notification: NotificationRecord) => {
-    setNotifications(notifications.map((item) => item.id === notification.id ? { ...item, read: true } : item));
+    setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, read: true } : item));
     navigate(notification.href);
   };
   return <>
-    <PageHeading eyebrow="CENTRO DE ACTIVIDAD" title="Notificaciones" description="Alertas de inventario, compras, inspecciones y custodia." actions={<Button onClick={() => setNotifications(notifications.map((item) => ({ ...item, read: true })))} disabled={!unread}>Marcar todas como leídas</Button>} />
+    <PageHeading eyebrow="CENTRO DE ACTIVIDAD" title="Notificaciones" description="Alertas de inventario, compras, inspecciones y custodia." actions={<Button onClick={() => setNotifications((current) => current.map((item) => ({ ...item, read: true })))} disabled={!unread}>Marcar todas como leídas</Button>} />
     <div className="stat-grid stat-grid-small"><MetricCard label="Sin leer" value={String(unread)} change="requieren atención" trend="attention" note="alertas pendientes" icon={Bell} color="amber" /><MetricCard label="En el centro" value={String(notifications.length)} change="registradas" trend="up" note="actividad reciente" icon={Activity} color="blue" /><MetricCard label="Categorías" value={String(new Set(notifications.map((item) => item.category)).size)} change="activas" trend="up" note="áreas de operación" icon={Boxes} color="mint" /><MetricCard label="Leídas" value={String(notifications.length - unread)} change="al día" trend="up" note="revisadas en este navegador" icon={Check} color="violet" /></div>
-    <div className="notification-list-card surface-card"><div className="notification-filters">{["Todas", "No leídas"].map((item) => <button key={item} className={filter === item ? "filter-tab active" : "filter-tab"} onClick={() => setFilter(item)}>{item}{item === "No leídas" && <span className="tab-count">{unread}</span>}</button>)}</div>{visible.map((notification) => <article className={`notification-row ${notification.read ? "notification-read" : ""}`} key={notification.id}><span className="notification-symbol"><Bell size={16} /></span><div className="notification-copy"><div><strong>{notification.title}</strong><span className="category-label">{notification.category}</span></div><p>{notification.description}</p><small>{notification.time}</small></div><div className="notification-actions"><button className="subtle-link" onClick={() => openNotification(notification)}>Abrir <ArrowRight size={14} /></button>{!notification.read && <button className="notification-mark" aria-label="Marcar como leída" onClick={() => setNotifications(notifications.map((item) => item.id === notification.id ? { ...item, read: true } : item))}><Check size={15} /></button>}</div></article>)}{visible.length === 0 && <div className="empty-state"><Bell size={21} /><strong>No tienes alertas sin leer</strong><span>Las notificaciones nuevas aparecerán aquí.</span></div>}</div>
+    <div className="notification-list-card surface-card"><div className="notification-filters">{["Todas", "No leídas"].map((item) => <button key={item} className={filter === item ? "filter-tab active" : "filter-tab"} onClick={() => setFilter(item)}>{item}{item === "No leídas" && <span className="tab-count">{unread}</span>}</button>)}</div>{visible.map((notification) => <article className={`notification-row ${notification.read ? "notification-read" : ""}`} key={notification.id}><span className="notification-symbol"><Bell size={16} /></span><div className="notification-copy"><div><strong>{notification.title}</strong><span className="category-label">{notification.category}</span></div><p>{notification.description}</p><small>{notification.time}</small></div><div className="notification-actions"><button className="subtle-link" onClick={() => openNotification(notification)}>Abrir <ArrowRight size={14} /></button>{!notification.read && <button className="notification-mark" aria-label="Marcar como leída" onClick={() => setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, read: true } : item))}><Check size={15} /></button>}</div></article>)}{visible.length === 0 && <div className="empty-state"><Bell size={21} /><strong>No tienes alertas sin leer</strong><span>Las notificaciones nuevas aparecerán aquí.</span></div>}</div>
   </>;
 }
 
@@ -814,22 +901,24 @@ function SettingsPage({ onToast }: { onToast: (title: string, detail?: string) =
   const [modal, setModal] = useState<"member" | "location" | null>(null);
   const saveGeneral = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSettings({ ...settings, ...general });
+    setSettings((current) => ({ ...current, ...general }));
     onToast("Configuración guardada", general.organization);
   };
   const addMember = (values: Record<string, string>) => {
-    if (settings.users.some((user) => user.email.toLowerCase() === values.email.trim().toLowerCase())) { onToast("Correo ya registrado", values.email); return; }
-    setSettings({ ...settings, users: [...settings.users, { name: values.name.trim(), email: values.email.trim(), role: values.role }] });
+    const currentSettings = readPersistentSnapshot("atlas.settings", settings);
+    if (currentSettings.users.some((user) => user.email.trim().toLowerCase() === values.email.trim().toLowerCase())) { onToast("Correo ya registrado", values.email); return; }
+    setSettings((current) => ({ ...current, users: [...current.users, { name: values.name.trim(), email: values.email.trim(), role: values.role }] }));
     setModal(null);
     onToast("Invitación preparada", `${values.name} · ${values.role}`);
   };
   const addLocation = (values: Record<string, string>) => {
-    if (settings.locations.some((item) => item.toLowerCase() === values.name.trim().toLowerCase())) { onToast("Ubicación existente", values.name); return; }
-    setSettings({ ...settings, locations: [...settings.locations, values.name.trim()] });
+    const currentSettings = readPersistentSnapshot("atlas.settings", settings);
+    if (currentSettings.locations.some((item) => item.trim().toLowerCase() === values.name.trim().toLowerCase())) { onToast("Ubicación existente", values.name); return; }
+    setSettings((current) => ({ ...current, locations: [...current.locations, values.name.trim()] }));
     setModal(null);
     onToast("Ubicación agregada", values.name);
   };
-  const updateNotification = (key: keyof OrganizationSettings["notifications"], checked: boolean) => setSettings({ ...settings, notifications: { ...settings.notifications, [key]: checked } });
+  const updateNotification = (key: keyof OrganizationSettings["notifications"], checked: boolean) => setSettings((current) => ({ ...current, notifications: { ...current.notifications, [key]: checked } }));
   const tabs = [{ label: "General", icon: Settings2 }, { label: "Usuarios y roles", icon: UsersRound }, { label: "Ubicaciones", icon: Boxes }, { label: "Notificaciones", icon: Bell }];
   return <>
     <PageHeading eyebrow="ADMINISTRACIÓN" title="Configuración" description="Administra la organización, los accesos y las preferencias del workspace." />
@@ -904,14 +993,15 @@ function AssetModal({ onClose, onSubmit, isPending, error }: { onClose: () => vo
 function ProductModal({ onClose, onSubmit, isPending, error }: { onClose: () => void; onSubmit: (values: ProductValues) => void; isPending: boolean; error?: string }) {
   const { register, handleSubmit, formState: { errors } } = useForm<ProductFormInput, unknown, ProductValues>({
     resolver: zodResolver(productSchema),
-    defaultValues: { tracking: "Individual", stock: 0, minimum: 0, value: 0, location: "Bodega central", category: "Computadores" },
+    defaultValues: { tracking: "Individual", minimum: 0, value: 0, location: "Bodega central", category: "Computadores" },
   });
   return <Modal title="Crear producto" subtitle="Agrega un nuevo artículo al catálogo de tu organización." onClose={onClose}>
     <form className="modal-form" onSubmit={handleSubmit(onSubmit)}>
       <div className="form-two"><FormField label="Nombre del producto" error={errors.name?.message}><input autoFocus placeholder="Ej. Portátil Latitude 5450" {...register("name")} /></FormField><FormField label="Código interno" error={errors.code?.message}><input placeholder="Ej. LAP-0032" {...register("code")} /></FormField></div>
       <div className="form-two"><FormField label="Categoría" error={errors.category?.message}><select {...register("category")}><option>Computadores</option><option>Monitores</option><option>Periféricos</option><option>Móviles</option><option>Accesorios</option><option>Seguridad</option><option>Herramientas</option><option>Consumibles</option></select></FormField><FormField label="Marca" error={errors.brand?.message}><input placeholder="Ej. Dell" {...register("brand")} /></FormField></div>
       <FormField label="Modalidad de control"><div className="radio-cards"><label><input type="radio" value="Individual" {...register("tracking")} /><span className="radio-card-icon"><Boxes size={17} /></span><span><strong>Individual</strong><small>Serial por cada unidad</small></span></label><label><input type="radio" value="Por cantidad" {...register("tracking")} /><span className="radio-card-icon"><Package size={17} /></span><span><strong>Por cantidad</strong><small>Control de existencias</small></span></label></div></FormField>
-      <div className="form-two"><FormField label="Existencias iniciales" error={errors.stock?.message}><input type="number" min="0" {...register("stock")} /></FormField><FormField label="Stock mínimo" error={errors.minimum?.message}><input type="number" min="0" {...register("minimum")} /></FormField></div>
+      <FormField label="Stock mínimo" error={errors.minimum?.message}><input type="number" min="0" {...register("minimum")} /></FormField>
+      <div className="receipt-info"><PackageCheck size={16} /><span>Esta ficha crea el producto en el catálogo. Registra sus existencias desde Compras → Registrar recepción para conservar la trazabilidad.</span></div>
       <div className="form-two"><FormField label="Ubicación inicial" error={errors.location?.message}><select {...register("location")}><option>Bodega central</option><option>Sede principal</option><option>Sede norte</option><option>Sede sur</option></select></FormField><FormField label="Valor unitario (COP)" error={errors.value?.message}><input type="number" min="0" step="1000" {...register("value")} /></FormField></div>
       {error && <div className="form-error" role="alert"><AlertTriangle size={15} />{error}</div>}
       <div className="modal-actions"><Button onClick={onClose}>Cancelar</Button><Button type="submit" variant="primary" icon={Plus} disabled={isPending}>{isPending ? "Guardando..." : "Crear producto"}</Button></div>
@@ -1029,20 +1119,61 @@ function Modal({ title, subtitle, onClose, children, className = "" }: { title: 
 
 function AssetDrawer({ asset, onClose, onToast }: { asset: Asset; onClose: () => void; onToast: (title: string, detail?: string) => void }) {
   const [moving, setMoving] = useState(false);
+  const [assignmentRows, setAssignmentRows] = usePersistentValue("atlas.assignments", assignmentSeed);
+  const [groups] = usePersistentValue("atlas.groups", organizationGroupSeed);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const availableTypes: Movement["type"][] = asset.status === "Disponible" ? ["Traslado", "Asignación"]
+    : asset.status === "Asignado" ? ["Traslado", "Devolución"] : ["Traslado"];
+  const movementFields: QuickField[] = [
+    { name: "type", label: "Tipo de movimiento", type: "select", options: availableTypes },
+    { name: "target", label: "Destino o responsable", placeholder: "Ubicación, persona o equipo" },
+    ...(availableTypes.includes("Asignación") ? [{ name: "group", label: "Grupo responsable", type: "select" as const, options: groups.map((group) => group.name), required: false }] : []),
+    { name: "actor", label: "Registrado por", placeholder: "Nombre del responsable" },
+  ];
   const saveMovement = async (values: Record<string, string>) => {
     const type = values.type as Movement["type"];
     const target = values.target.trim();
     const [assets, movements] = await Promise.all([getAssets(), getMovements()]);
     const current = assets.find((item) => item.id === asset.id);
     if (!current) { onToast("Activo no encontrado", "Actualiza el inventario e inténtalo de nuevo."); return; }
+    const allowedNow: Movement["type"][] = current.status === "Disponible" ? ["Traslado", "Asignación"]
+      : current.status === "Asignado" ? ["Traslado", "Devolución"] : ["Traslado"];
+    if (!allowedNow.includes(type)) { onToast("Movimiento no permitido", `El activo está ${current.status.toLowerCase()}. Actualiza su estado antes de continuar.`); return; }
+    if (!target) { onToast("Destino obligatorio", "Indica la ubicación o persona responsable."); return; }
+    const currentAssignments = readPersistentSnapshot("atlas.assignments", assignmentRows);
+    const openAssignment = currentAssignments.find((row) => row.assetId === current.id && row.status !== "Devuelta");
+    if (type === "Asignación" && openAssignment) { onToast("La custodia ya existe", `${current.name} tiene una asignación abierta.`); return; }
+    if (type === "Devolución" && (!openAssignment || openAssignment.status !== "Activa" || current.assignedTo !== openAssignment.recipient)) {
+      onToast("No se puede registrar la devolución", "No hay una asignación activa que coincida con el responsable del activo.");
+      return;
+    }
+    const prefix = type === "Asignación" ? "ASI" : "TRA";
+    const nextMovementNumber = Math.max(0, ...movements.filter((item) => item.reference.startsWith(`${prefix}-${new Date().getFullYear()}-`)).map((item) => Number(item.reference.split("-").at(-1)) || 0)) + 1;
+    const assignmentNumber = Math.max(0, ...currentAssignments.map((row) => Number(row.ref.split("-").at(-1)) || 0)) + 1;
+    const group = values.group?.trim() || "Sin grupo";
+    const newAssignment: AssignmentRow | undefined = type === "Asignación" ? {
+      ref: `ASI-${new Date().getFullYear()}-${String(assignmentNumber).padStart(4, "0")}`,
+      asset: current.name, assetId: current.id, recipient: target, group, date: "Ahora", status: "Activa",
+    } : undefined;
+    const reference = type === "Devolución" ? `DEV-${openAssignment!.ref}` : `${prefix}-${new Date().getFullYear()}-${String(nextMovementNumber).padStart(4, "0")}`;
     const updated: Asset = type === "Traslado" ? { ...current, location: target }
       : type === "Asignación" ? { ...current, status: "Asignado", assignedTo: target }
-        : type === "Devolución" ? { ...current, status: "Disponible", assignedTo: "—", location: target }
-          : current;
-    const movement: Movement = { id: `m-${Date.now()}`, type, item: current.name, code: current.code, quantity: "1 activo", from: type === "Devolución" ? current.assignedTo : current.location, to: target, actor: values.actor.trim(), date: "Ahora", reference: `${type === "Asignación" ? "ASI" : type === "Devolución" ? "DEV" : "TRA"}-${Date.now().toString().slice(-6)}` };
-    await Promise.all([saveAssets(assets.map((item) => item.id === asset.id ? updated : item)), saveMovements([movement, ...movements])]);
+        : { ...current, status: "Disponible", assignedTo: "—", location: target };
+    const movement: Movement = {
+      id: `m-${Date.now()}`, type, item: current.name, code: current.code, quantity: "1 activo",
+      from: type === "Devolución" ? current.assignedTo : current.location,
+      to: type === "Asignación" ? `${target} · ${group}` : target,
+      actor: values.actor.trim(), date: "Ahora", reference,
+    };
+    try {
+      await Promise.all([saveAssets(assets.map((item) => item.id === asset.id ? updated : item)), saveMovements([movement, ...movements])]);
+    } catch {
+      onToast("No se pudo guardar el movimiento", "Inténtalo de nuevo; no se registró el cambio.");
+      return;
+    }
+    if (newAssignment) setAssignmentRows((current) => [newAssignment, ...current]);
+    if (type === "Devolución" && openAssignment) setAssignmentRows((current) => current.map((row) => row.ref === openAssignment.ref ? { ...row, status: "Devuelta" } : row));
     queryClient.invalidateQueries({ queryKey: ["assets"] });
     queryClient.invalidateQueries({ queryKey: ["movements"] });
     setMoving(false);
@@ -1051,7 +1182,7 @@ function AssetDrawer({ asset, onClose, onToast }: { asset: Asset; onClose: () =>
   };
   return <>
     <div className="drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="asset-drawer" role="dialog" aria-modal="true" aria-labelledby="asset-title"><div className="drawer-top"><span>DETALLE DEL ACTIVO</span><button className="icon-button" aria-label="Cerrar detalle" onClick={onClose}><X size={18} /></button></div><div className="drawer-hero"><div className={`asset-hero-thumb ${asset.tone}`}><span>{asset.initials}</span></div><StatusBadge label={asset.status} /></div><h2 id="asset-title">{asset.name}</h2><p className="drawer-code">{asset.code} <span>·</span> {asset.category}</p><div className="drawer-actions"><Button variant="primary" icon={ArrowLeftRight} onClick={() => setMoving(true)}>Registrar movimiento</Button><button className="icon-button" aria-label="Ver historial del activo" onClick={() => { onClose(); navigate(`/movements?search=${encodeURIComponent(asset.code)}`); }}><Ellipsis size={18} /></button></div><div className="drawer-section"><h3>Información del activo</h3><DetailLine label="Número de serial" value={asset.serial} /><DetailLine label="Ubicación actual" value={asset.location} /><DetailLine label="Responsable" value={asset.assignedTo} /><DetailLine label="Estado operativo" value={asset.status} /></div><div className="drawer-section"><div className="section-heading-inline"><h3>Última actividad</h3><button onClick={() => { onClose(); navigate(`/movements?search=${encodeURIComponent(asset.code)}`); }}>Ver historial</button></div><div className="timeline-item"><span className="timeline-point point-green"><Check size={11} /></span><div><strong>Activo actualizado</strong><small>Mariana Torres · Hoy, 9:18 a. m.</small></div></div><div className="timeline-item"><span className="timeline-point point-blue"><ArrowLeftRight size={11} /></span><div><strong>{asset.status === "Asignado" ? "Asignado a " + asset.assignedTo : "Ingreso registrado"}</strong><small>Juan Pardo · 21 oct, 2026</small></div></div></div></aside></div>
-    {moving && <QuickFormModal title="Registrar movimiento" subtitle={`${asset.name} · ${asset.code}`} submitLabel="Guardar movimiento" onClose={() => setMoving(false)} onSubmit={(values) => void saveMovement(values)} fields={[{ name: "type", label: "Tipo de movimiento", type: "select", options: ["Traslado", "Asignación", "Devolución"] }, { name: "target", label: "Destino o responsable", placeholder: "Ubicación, persona o equipo" }, { name: "actor", label: "Registrado por", placeholder: "Nombre del responsable" }]} initialValues={{ type: "Traslado", target: asset.location, actor: "Mariana Torres" }} />}
+    {moving && <QuickFormModal title="Registrar movimiento" subtitle={`${asset.name} · ${asset.code}`} submitLabel="Guardar movimiento" onClose={() => setMoving(false)} onSubmit={(values) => void saveMovement(values)} fields={movementFields} initialValues={{ type: "Traslado", target: asset.location, group: groups[0]?.name ?? "", actor: "Mariana Torres" }} />}
   </>;
 }
 

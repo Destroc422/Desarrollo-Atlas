@@ -1,80 +1,49 @@
-# Propuesta referencial de implementación de Atlas
+# Presupuesto revisado: piloto de Atlas con una persona y Codex
 
-**Fecha:** 26 de octubre de 2026 · **Moneda:** pesos colombianos (COP) · **Tipo:** estimación para planeación, no oferta contractual
+**Fecha:** 26 de octubre de 2026 · **Moneda:** COP, con Codex facturado en USD · **Tipo:** presupuesto aritmético para planeación
 
-## Resumen ejecutivo
+## Escenario solicitado
 
-Para entregar una primera versión productiva que cubra los contextos funcionales definidos para Atlas, la referencia es **6 a 8 meses calendario**, con un equipo de aproximadamente **5 a 6 personas** y **2.200 a 2.800 horas-persona**. El presupuesto de referencia es **COP 305 a 485 millones antes de impuestos**, con un punto de planeación cercano a **COP 405 millones**.
+- Una persona durante **1,5 meses (aproximadamente 6,5 semanas)**.
+- Jornada máxima de referencia: **42 horas semanales**, equivalente a **210 horas mensuales** para calcular el valor de la hora ordinaria desde el 15 de julio de 2026.
+- Acceso a **dos modelos de Codex bajo una sola cuenta individual**. Los modelos no requieren dos suscripciones; el plan da acceso a Codex y define sus límites de uso.
+- Salario mínimo mensual colombiano 2026: **COP 1.750.905**.
 
-La cifra presupone decisiones de alcance durante una fase inicial de descubrimiento y un despliegue web en una nube elegida por el cliente. Nube, licencias de terceros, hardware, integraciones no identificadas y operación posterior se cotizan aparte. “100% funcional” significa que todos los escenarios de aceptación acordados para esta primera versión pasan en el ambiente de producción; no significa que un producto esté libre de errores o de cambios futuros.
+El presupuesto calcula el tiempo de trabajo a salario mínimo, como pediste. Esto es una base matemática y **no una tarifa de mercado para contratar un desarrollador de software**.
 
-## Alcance considerado
+## Cálculo
 
-- Identidad, inicio de sesión, usuarios, roles y permisos.
-- Catálogo, productos y reglas de seguimiento por unidad o cantidad.
-- Compras, aprobaciones, recepción parcial y completa, y alta de fichas para productos nuevos al recibir.
-- Inventario, existencias, activos serializados, ubicaciones, ajustes y traslados.
-- Organización, sedes, grupos y responsables.
-- Asignaciones, actas de entrega, devoluciones y trazabilidad de custodia.
-- Inspecciones, evidencias, incidencias y agenda.
-- Mantenimiento, órdenes de trabajo, costos y disponibilidad de activos.
-- Notificaciones, reportes y auditoría.
-- API Gateway, correlación de solicitudes, controles de seguridad, bases de datos con propiedad por servicio y eventos versionados en RabbitMQ.
-- Interfaz React/TypeScript, APIs, pruebas, CI/CD, observabilidad básica, documentación técnica, despliegue y transferencia al equipo del cliente.
+| Concepto | Cálculo | Valor de referencia |
+|---|---:|---:|
+| Horas mensuales | 42 h/semana × 30 ÷ 6 | 210 h |
+| Hora ordinaria de referencia para nómina | COP 1.750.905 ÷ 210 h | **COP 8.337,64/h** |
+| Horas efectivas aproximadas del plazo | 42 h/semana × 52/12 × 1,5 meses | **273 h** |
+| Remuneración base | COP 1.750.905 × 1,5 meses | **COP 2.626.358** |
+| Codex Pro para uso intensivo | USD 100/mes × 2 ciclos mensuales | USD 200 ≈ **COP 631.686** |
+| **Presupuesto directo estimado** | Remuneración + dos ciclos de Codex | **COP 3.258.044** |
 
-Se supone un primer despliegue para una organización, una carga inicial por plantillas CSV acordadas y servicios que puedan compartir un clúster administrado, manteniendo bases, credenciales y propiedad lógica separadas. No se supone una instalación on-premise ni una integración con ERP, directorio corporativo, contabilidad, RFID o proveedores externos hasta confirmar sus interfaces.
+El divisor de **210 horas** es la referencia de nómina para calcular la hora ordinaria con la jornada máxima de 42 horas semanales. No representa las horas efectivas de trabajo de cada mes. Para este presupuesto, el salario se calcula como 1,5 salarios mínimos y corresponde a unas 273 horas efectivas; el valor efectivo del salario por hora de trabajo del periodo es aproximadamente **COP 9.620,36**.
 
-## Fases y plazo
+La conversión de Codex usa la TRM de COP 3.158,43 por USD vigente el 26 de octubre de 2026. La tarjeta, impuestos o variación cambiaria pueden modificar el valor facturado. Si se pudiera prorratear exactamente el mes y medio de Codex, serían USD 150 (≈ COP 473.765), y el total aritmético sería **COP 3.100.123**; el presupuesto principal reserva dos cobros mensuales completos.
 
-| Fase | Duración de referencia | Resultado |
-|---|---:|---|
-| Descubrimiento y cierre de alcance | 2–3 semanas | Reglas, flujos, integraciones, criterios de aceptación y plan de datos aprobados |
-| Fundaciones de plataforma | 4–6 semanas | Identidad, gateway, bases, mensajería, despliegue inicial y estructura del frontend |
-| Catálogo, compras e inventario | 6–8 semanas | Operación de productos, órdenes, recepción, activos y movimientos |
-| Organización, asignaciones e inspecciones | 5–7 semanas | Custodia, sedes, agenda, evidencias e incidencias |
-| Mantenimiento, reportes, notificaciones y auditoría | 4–6 semanas | Seguimiento operativo, alertas, consultas y trazabilidad |
-| Pruebas de aceptación, datos y salida a producción | 3–5 semanas | Correcciones, carga inicial, formación y puesta en operación |
+El auxilio de transporte de 2026 es COP 249.095 mensuales para quien cumpla las condiciones. Si aplica durante el mes y medio, agregaría aproximadamente **COP 373.643**, para un total directo de **COP 3.631.687**. El presupuesto no suma aportes del empleador, prestaciones, vacaciones, impuestos ni costos administrativos de contratación; el costo de nómina formal debe liquidarse según la modalidad contractual y las condiciones del empleador.
 
-Las fases se solapan parcialmente con trabajo paralelo. La duración total estimada es de **24 a 32 semanas**. La aprobación tardía de reglas, acceso a sistemas externos, calidad de los datos o revisiones del cliente puede ampliar el calendario.
+## Qué cubre el plazo de seis semanas
 
-## Equipo de referencia
+Con aproximadamente 273 horas efectivas y Codex como apoyo, el alcance razonable es un **piloto priorizado sobre el prototipo existente**: fortalecer reglas de recepción, existencias, seriales, asignaciones, mantenimiento y trazabilidad; pulir validaciones; y cerrar una lista acordada de criterios de aceptación para demostración o piloto controlado.
 
-- Líder técnico / arquitecto: 0,5–1 dedicación.
-- Dos o tres desarrolladores backend.
-- Un desarrollador frontend.
-- QA / automatización: 0,5–1 dedicación.
-- DevOps / seguridad: parcial, con refuerzo en despliegues.
-- Analista funcional / producto: parcial.
+Este escenario **no alcanza para entregar toda la arquitectura de microservicios al 100% en producción**. No incluye construir y desplegar todos los servicios independientes, identidad empresarial, API Gateway productiva, bases por servicio, RabbitMQ, integración con ERP/SSO, migraciones complejas, observabilidad, pruebas de carga, soporte ni garantías operativas. Dos modelos aceleran tareas y revisiones, pero no reemplazan una persona adicional para ejecutar, verificar y operar esos componentes.
 
-La composición exacta puede variar; la estimación usa horas-persona y no exige que cada perfil sea de tiempo completo durante toda la ejecución.
+Para este plazo, “funcional” debe significar que los flujos del piloto acordados pasan sus criterios de aceptación en un ambiente de prueba. Si el objetivo sigue siendo toda la plataforma productiva, el plazo de seis semanas y este presupuesto no son suficientes.
 
-## Modelo de costo
+## Costos de Codex y uso de modelos
 
-| Escenario | Horas-persona | Tarifa combinada de planeación | Subtotal con reserva de 15% |
-|---|---:|---:|---:|
-| Bajo | 2.200 | COP 120.000/h | COP 304.800.000 |
-| Central | 2.500 | COP 140.000/h | COP 402.500.000 |
-| Alto | 2.800 | COP 150.000/h | COP 483.000.000 |
+OpenAI lista Codex dentro de sus planes ChatGPT: Plus aparece a USD 20/mes con uso enfocado, y Pro a USD 100/mes con límites superiores para jornadas intensivas. Esta estimación usa **una cuenta Pro** para un solo usuario y dos modelos; no compra dos asientos. Si los modelos se llaman por API, el costo cambia a facturación por tokens y debe calcularse con el consumo real; no está incluido aquí.
 
-Por simplicidad, la recomendación presupuestal se redondea a **COP 305–485 millones antes de impuestos**, con **COP 405 millones** como cifra central para planear. La tarifa combinada es un supuesto de modelación para un proveedor que integra perfiles, coordinación y entrega; no es una tarifa salarial publicada ni una cotización de proveedor. La reserva cubre incertidumbre moderada de requisitos y estabilización. No cubre ampliaciones de alcance ni integraciones que aún no hayan sido identificadas.
+## Referencias consultadas
 
-Las referencias públicas disponibles sirven como contexto para los costos del talento: Multiplier publica rangos orientativos de salario bruto mensual para desarrolladores junior, mid y senior en Colombia durante 2026, y estima que la carga del empleador depende del caso; Cenisoft/FEDESOFT publica su encuesta del sector TI para 2025; la guía 2026 de Michael Page refleja demanda por perfiles tecnológicos, aunque las tablas salariales requieren desbloqueo. Esas referencias **no** determinan por sí solas el precio del proyecto: la cifra de Atlas se calcula por esfuerzo, composición del equipo, coordinación, calidad y contingencia.
-
-## Fuera del presupuesto
-
-- Consumo de nube, dominios, certificados, correo/SMS/WhatsApp y licencias de terceros.
-- Compra e instalación de lectores, impresoras, etiquetas, RFID u otros dispositivos.
-- Integraciones con ERP, SSO/directorios, contabilidad, compras externas o proveedores, hasta definir sistemas, protocolos y ambientes de prueba.
-- Limpieza extensa de datos, digitación o migración desde fuentes no estructuradas.
-- Aplicaciones móviles nativas y funcionamiento offline.
-- Soporte evolutivo después de la garantía correctiva acordada.
-
-## Siguiente paso para cerrar una oferta
-
-Realizar un descubrimiento de **2 a 3 semanas** para confirmar usuarios y sedes, volumen de datos, reglas de aprobación, formatos de migración, integraciones, seguridad requerida, infraestructura y responsables de aceptación. Al cerrar esa etapa se puede transformar el rango en un backlog priorizado, calendario por entregas y precio contractual con supuestos y criterios verificables.
-
-## Fuentes de contexto salarial
-
-- [Multiplier — Hiring in Colombia 2026: Salary & Employer Costs Guide](https://www.usemultiplier.com/columbia/cost-of-employment). Publica rangos orientativos por seniority y supuestos de cargas del empleador; el propio artículo advierte que los benchmarks agregados son un punto de partida.
-- [Cenisoft/FEDESOFT — Encuesta de salarios y profesionales del sector de software y TI en Colombia 2025](https://cenisoft.org/encuesta-de-salarios-2025-infografia/).
-- [Michael Page Colombia — Guía salarial de tecnología 2026](https://www.michaelpage.com.co/guia-salarial/tecnolog%C3%ADa). Presenta perfiles y demanda; la vista consultada requiere desbloquear las tablas para ver valores.
+- [Decreto 1469 de 2025 en el normograma de la Procuraduría](https://apps.procuraduria.gov.co/normograma/compilacion/docs/decreto_1469_2025.htm): fija el salario mínimo mensual de 2026 en COP 1.750.905.
+- [Circular 101 de 2025 del Ministerio del Trabajo, alojada en el normograma de CRC](https://normograma.crcom.gov.co/crc/compilacion/docs/circular_mintra_0101_2025.htm): recoge la reducción a 42 horas desde el 15 de julio de 2026 y el divisor de 210 horas al mes para el cálculo de hora ordinaria.
+- [OpenAI Codex: planes y precios](https://openai.com/codex/): muestra Codex incluido en los planes ChatGPT y las tarifas mensuales consultadas para Plus y Pro.
+- [TRM histórica en datos.gov.co, fuente Superintendencia Financiera](https://www.datos.gov.co/Econom-a-y-Finanzas/Tasa-de-Cambio-Representativa-del-Mercado-Historic/mcec-87by/data_preview): COP 3.158,43 por USD para la vigencia del 26 de octubre de 2026.
+- [Multiplier — salarios y costos de contratación en Colombia 2026](https://www.usemultiplier.com/columbia/cost-of-employment): contexto salarial agregado; sus rangos publicados para desarrollo de software superan el salario mínimo y no son una cotización de proyecto.
