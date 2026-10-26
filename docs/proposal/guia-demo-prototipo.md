@@ -26,30 +26,25 @@
 - Recarga la página para comprobar persistencia local.
 - Restaura los datos de ejemplo al terminar una sesión de aceptación cuando quieras volver a las cifras iniciales.
 
-## Registro de aceptación final — una sola sesión
+## Registro de revisión interna final
 
-Completa este registro en una sesión integrada, recorriendo los escenarios en secuencia. No es necesario ejecutar pruebas automatizadas separadas por módulo. Usa únicamente datos ficticios y restaura el demo al finalizar.
+El solicitante pidió cerrar el refinamiento sin su validación. Este registro resume evidencias ya obtenidas en una sola revisión consolidada; no representa una aprobación personal ni una certificación con software de lector de pantalla.
 
-**Revisor:** ____________________  **Fecha:** ____________________  **Navegador/dispositivo:** ____________________
+**Revisor:** Codex · revisión interna  **Fecha:** 26 de octubre de 2026  **Navegador:** navegador integrado de Codex, origen local aislado para recorridos
 
-**Lector de pantalla y versión (si aplica):** ______________________________________________
+**Accesibilidad:** árbol AX del navegador inspeccionado; no se ejecutó NVDA, Narrador ni VoiceOver.
 
 | Recorrido integrado | Resultado (OK / Pendiente) | Observaciones o ajuste necesario |
 |---|---|---|
-| Crear una orden, recibir una parte y el saldo, y confirmar que existencias, activos serializados y movimientos reflejan una sola recepción. |  |  |
-| Asignar y devolver un activo; verificar su disponibilidad y el historial de custodia. |  |  |
-| Registrar una inspección crítica, comprobar el bloqueo, documentar su resolución y completar el mantenimiento relacionado. |  |  |
-| Consultar un reporte y la bitácora, descargar el CSV y restaurar los datos de demostración. |  |  |
-| Completar los recorridos con teclado; revisar con lector de pantalla nombres de controles, errores de formulario, cambios de estado y confirmaciones. |  |  |
+| Crear una orden, recibir una parte y el saldo, y confirmar existencias, activos serializados y movimientos. | Revisado en navegador | Recepción parcial/total; serial duplicado y exceso rechazados; demo restaurado. |
+| Asignar y devolver un activo; revisar disponibilidad e historial de custodia. | Revisado en navegador | Estados y movimientos relacionados comprobados; demo restaurado. |
+| Registrar una inspección crítica, comprobar el bloqueo, documentar su resolución y completar mantenimiento. | Revisado en navegador | Bloqueo, evidencia de resolución y recuperación del estado comprobados. |
+| Consultar reportes y bitácora, descargar CSV y restaurar los datos de demostración. | Revisado en navegador | Ocho CSV inspeccionados; datos semilla restaurables. |
+| Teclado, foco, formularios y nombres accesibles. | Revisión estructural | Árbol AX y controles clave revisados; narración con lector real no verificada. |
 
-**Resultado general:** Aceptado / Aceptado con pendientes / Requiere ajustes
+**Resultado general:** Cierre interno con límite de lector de pantalla documentado; no se solicitó aprobación del usuario.
 
-**Pendientes priorizados:**
-
-1. __________________________________________________________________________________
-2. __________________________________________________________________________________
-
-**Aprobación del revisor:** ______________________________
+**Límite conocido:** validar la salida hablada con NVDA, Narrador o VoiceOver si el prototipo pasa a una fase con exigencia formal de accesibilidad.
 
 ## Límites conocidos
 
