@@ -2,6 +2,8 @@
 
 Las entregas se validan con comportamiento ejecutable antes de ampliar el alcance. Los servicios no se añaden como contenedores vacíos para simular cobertura.
 
+Para llevar el prototipo existente hasta un piloto de producto y luego completar la plataforma, seguir el plan detallado de [prototipo a producto](../proposal/plan-prototipo-a-producto.md). Esta hoja resume el orden técnico de contextos; no implica que el entorno Compose actual ya esté validado ni que los servicios estén implementados.
+
 ## Fase 1 — diseño arquitectónico (documentado)
 
 - Contextos, propiedad de datos, invariantes, topología, integración y ADR.

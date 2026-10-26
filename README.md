@@ -28,6 +28,7 @@ El prototipo guarda datos de demostración en el navegador (`localStorage`). Per
 - [Decisiones arquitectónicas](docs/adr/README.md)
 - [Fases de implementación](docs/architecture/roadmap.md)
 - [Entorno local](docs/deployment/local-development.md)
+- [Plan para pasar del prototipo a producto](docs/proposal/plan-prototipo-a-producto.md)
 
 ## Inicio
 
