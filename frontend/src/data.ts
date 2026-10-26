@@ -1,3 +1,5 @@
+import { readDemoValue, writeDemoValue, writeDemoValues } from "./storage";
+
 export type Product = {
   id: string;
   code: string;
@@ -71,21 +73,18 @@ export const seedProducts = (): Product[] => productSeed;
 export const seedAssets = (): Asset[] => assetSeed;
 export const seedMovements = (): Movement[] => movementSeed;
 
-function readLocal<T>(key: string, seed: () => T): T {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored ? (JSON.parse(stored) as T) : seed();
-  } catch {
-    return seed();
-  }
-}
+function readLocal<T>(key: string, seed: () => T): T { return readDemoValue(key, seed()); }
 
 export const getProducts = async (): Promise<Product[]> => readLocal("atlas.products", seedProducts);
-export const saveProducts = async (products: Product[]): Promise<void> => { localStorage.setItem("atlas.products", JSON.stringify(products)); };
+export const saveProducts = async (products: Product[]): Promise<void> => { writeDemoValue("atlas.products", products); };
 export const getAssets = async (): Promise<Asset[]> => readLocal("atlas.assets", seedAssets);
-export const saveAssets = async (assets: Asset[]): Promise<void> => { localStorage.setItem("atlas.assets", JSON.stringify(assets)); };
+export const saveAssets = async (assets: Asset[]): Promise<void> => { writeDemoValue("atlas.assets", assets); };
 export const getMovements = async (): Promise<Movement[]> => readLocal("atlas.movements", seedMovements);
-export const saveMovements = async (movements: Movement[]): Promise<void> => { localStorage.setItem("atlas.movements", JSON.stringify(movements)); };
+export const saveMovements = async (movements: Movement[]): Promise<void> => { writeDemoValue("atlas.movements", movements); };
+
+export const saveInventorySnapshot = async (products: Product[], assets: Asset[], movements: Movement[]): Promise<void> => {
+  writeDemoValues({ "atlas.products": products, "atlas.assets": assets, "atlas.movements": movements });
+};
 
 export const currency = (value: number) => new Intl.NumberFormat("es-CO", {
   style: "currency",
