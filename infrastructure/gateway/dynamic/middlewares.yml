@@ -1,0 +1,30 @@
+http:
+  middlewares:
+    security-headers:
+      headers:
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: no-referrer
+        accessControlAllowOriginList:
+          - http://localhost:5173
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - X-Correlation-ID
+          - Traceparent
+        accessControlExposeHeaders:
+          - X-Correlation-ID
+        accessControlAllowCredentials: true
+        addVaryHeader: true
+    request-rate-limit:
+      rateLimit:
+        average: 100
+        period: 1m
+        burst: 50

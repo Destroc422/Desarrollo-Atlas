@@ -1,0 +1,93 @@
+name: inventory-platform
+
+services:
+  postgres:
+    image: postgres:18.6-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_ADMIN_USER:?Copy .env.example to .env and set POSTGRES_ADMIN_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}"
+      POSTGRES_DB: postgres
+      IDENTITY_DB_PASSWORD: "${IDENTITY_DB_PASSWORD:?Set IDENTITY_DB_PASSWORD in .env}"
+      CATALOG_DB_PASSWORD: "${CATALOG_DB_PASSWORD:?Set CATALOG_DB_PASSWORD in .env}"
+      PROCUREMENT_DB_PASSWORD: "${PROCUREMENT_DB_PASSWORD:?Set PROCUREMENT_DB_PASSWORD in .env}"
+      INVENTORY_DB_PASSWORD: "${INVENTORY_DB_PASSWORD:?Set INVENTORY_DB_PASSWORD in .env}"
+      ORGANIZATION_DB_PASSWORD: "${ORGANIZATION_DB_PASSWORD:?Set ORGANIZATION_DB_PASSWORD in .env}"
+      ASSIGNMENT_DB_PASSWORD: "${ASSIGNMENT_DB_PASSWORD:?Set ASSIGNMENT_DB_PASSWORD in .env}"
+      INSPECTION_DB_PASSWORD: "${INSPECTION_DB_PASSWORD:?Set INSPECTION_DB_PASSWORD in .env}"
+      MAINTENANCE_DB_PASSWORD: "${MAINTENANCE_DB_PASSWORD:?Set MAINTENANCE_DB_PASSWORD in .env}"
+      NOTIFICATION_DB_PASSWORD: "${NOTIFICATION_DB_PASSWORD:?Set NOTIFICATION_DB_PASSWORD in .env}"
+      REPORTING_DB_PASSWORD: "${REPORTING_DB_PASSWORD:?Set REPORTING_DB_PASSWORD in .env}"
+      AUDIT_DB_PASSWORD: "${AUDIT_DB_PASSWORD:?Set AUDIT_DB_PASSWORD in .env}"
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - "postgres-data:/var/lib/postgresql"
+      - "./infrastructure/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro"
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    mem_limit: 1g
+    cpus: 1.0
+
+  rabbitmq:
+    image: rabbitmq:4.4.0-management-alpine
+    restart: unless-stopped
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:?Set RABBITMQ_USER in .env}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}"
+      RABBITMQ_DEFAULT_VHOST: /platform
+    ports:
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_HOST_PORT:-15672}:15672"
+    volumes:
+      - "rabbitmq-data:/var/lib/rabbitmq"
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 768m
+    cpus: 1.0
+
+  api-gateway:
+    image: traefik:v3.7.16
+    restart: unless-stopped
+    user: "65532:65532"
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+    ports:
+      - "127.0.0.1:${GATEWAY_HOST_PORT:-8080}:8000"
+    volumes:
+      - "./infrastructure/gateway/traefik.yml:/etc/traefik/traefik.yml:ro"
+      - "./infrastructure/gateway/dynamic:/etc/traefik/dynamic:ro"
+    networks:
+      - edge
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    mem_limit: 256m
+    cpus: 0.5
+
+networks:
+  edge:
+    driver: bridge
+    internal: true
+  data:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres-data:
+  rabbitmq-data:

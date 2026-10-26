@@ -1,0 +1,31 @@
+entryPoints:
+  web:
+    address: ":8000"
+    http:
+      middlewares:
+        - security-headers@file
+        - request-rate-limit@file
+  health:
+    address: ":8082"
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+ping:
+  entryPoint: health
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+
+api:
+  dashboard: false
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
