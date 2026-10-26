@@ -108,6 +108,7 @@ Al inicio de cada etapa se acuerdan sus escenarios y datos semilla; al cierre se
 - [x] Generar fechas y horas iniciales de formularios desde la hora local del navegador, evitando que el desplazamiento UTC cambie el día mostrado en compras, inspecciones y mantenimiento.
 - [x] Completar estados vacíos informativos en compras, asignaciones y los listados de grupos y ubicaciones de Organización, distinguiendo entre falta de datos y filtros sin coincidencias.
 - [x] Llevar al primer campo inválido y asociar sus mensajes en el editor de órdenes de compra; bloquear envíos repetidos y conservar el formulario si falla el guardado.
+- [x] Añadir a la guía un registro único de aceptación humana para ejecutar los recorridos integrados y dejar observaciones y aprobación en una sola sesión.
 - [ ] Completar revisión exhaustiva con lector de pantalla de todos los formularios, estados y acciones de cada ruta, además de una sesión de aceptación humana.
 - [x] Inspeccionar el contenido descargado de los ocho CSV: encabezados, BOM UTF-8, caracteres en español, filas esperadas y correspondencia de inventario por ubicación.
 - [x] Generar alertas desde existencias, inspecciones vencidas/incidencias abiertas, entregas o firmas pendientes y órdenes sin aprobar/recibir; sincronizar contador lateral, respetar preferencias y conservar estado leído por entidad.

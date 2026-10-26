@@ -26,6 +26,31 @@
 - Recarga la página para comprobar persistencia local.
 - Restaura los datos de ejemplo al terminar una sesión de aceptación cuando quieras volver a las cifras iniciales.
 
+## Registro de aceptación final — una sola sesión
+
+Completa este registro en una sesión integrada, recorriendo los escenarios en secuencia. No es necesario ejecutar pruebas automatizadas separadas por módulo. Usa únicamente datos ficticios y restaura el demo al finalizar.
+
+**Revisor:** ____________________  **Fecha:** ____________________  **Navegador/dispositivo:** ____________________
+
+**Lector de pantalla y versión (si aplica):** ______________________________________________
+
+| Recorrido integrado | Resultado (OK / Pendiente) | Observaciones o ajuste necesario |
+|---|---|---|
+| Crear una orden, recibir una parte y el saldo, y confirmar que existencias, activos serializados y movimientos reflejan una sola recepción. |  |  |
+| Asignar y devolver un activo; verificar su disponibilidad y el historial de custodia. |  |  |
+| Registrar una inspección crítica, comprobar el bloqueo, documentar su resolución y completar el mantenimiento relacionado. |  |  |
+| Consultar un reporte y la bitácora, descargar el CSV y restaurar los datos de demostración. |  |  |
+| Completar los recorridos con teclado; revisar con lector de pantalla nombres de controles, errores de formulario, cambios de estado y confirmaciones. |  |  |
+
+**Resultado general:** Aceptado / Aceptado con pendientes / Requiere ajustes
+
+**Pendientes priorizados:**
+
+1. __________________________________________________________________________________
+2. __________________________________________________________________________________
+
+**Aprobación del revisor:** ______________________________
+
 ## Límites conocidos
 
 Esta entrega es un prototipo de frontend con datos locales por navegador. Autenticación, permisos reales, API Gateway, microservicios, RabbitMQ, bases de datos de servicio, concurrencia multiusuario, respaldos, despliegue productivo y auditoría de seguridad requieren implementación aparte. Las fechas iniciales y algunos registros representan datos semilla; se distinguen en la interfaz como datos de demostración.
