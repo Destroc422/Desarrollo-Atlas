@@ -105,6 +105,9 @@ Al inicio de cada etapa se acuerdan sus escenarios y datos semilla; al cierre se
 - [x] Verificar con teclado Escape, trampa de foco y retorno al control de origen en el detalle de activo y su formulario anidado de movimiento; añadir foco visible y apertura de filas de activos con Enter/Espacio.
 - [x] Auditar nombres accesibles en las 13 rutas y en 10 diálogos de alta/configuración; añadir `aria-label` descriptivos a las ocho búsquedas que dependían solo del placeholder. No se detectaron controles de formulario sin nombre accesible en las vistas revisadas.
 - [x] Mejorar la validación de los formularios compartidos: llevar el foco al primer campo inválido, asociar el mensaje con `aria-describedby`, marcar el control con `aria-invalid`, validar restricciones HTML dentro del flujo accesible y bloquear envíos repetidos durante operaciones asíncronas.
+- [x] Generar fechas y horas iniciales de formularios desde la hora local del navegador, evitando que el desplazamiento UTC cambie el día mostrado en compras, inspecciones y mantenimiento.
+- [x] Completar estados vacíos informativos en compras, asignaciones y los listados de grupos y ubicaciones de Organización, distinguiendo entre falta de datos y filtros sin coincidencias.
+- [x] Llevar al primer campo inválido y asociar sus mensajes en el editor de órdenes de compra; bloquear envíos repetidos y conservar el formulario si falla el guardado.
 - [ ] Completar revisión exhaustiva con lector de pantalla de todos los formularios, estados y acciones de cada ruta, además de una sesión de aceptación humana.
 - [x] Inspeccionar el contenido descargado de los ocho CSV: encabezados, BOM UTF-8, caracteres en español, filas esperadas y correspondencia de inventario por ubicación.
 - [x] Generar alertas desde existencias, inspecciones vencidas/incidencias abiertas, entregas o firmas pendientes y órdenes sin aprobar/recibir; sincronizar contador lateral, respetar preferencias y conservar estado leído por entidad.
@@ -118,5 +121,7 @@ Al inicio de cada etapa se acuerdan sus escenarios y datos semilla; al cierre se
 **Avance de accesibilidad:** se repitió la comprobación estructural en las 13 rutas; todas conservaron un único encabezado principal, identificadores sin duplicados y controles interactivos con nombre accesible. Se inspeccionaron los diálogos de producto, recepción, activo, orden de compra, asignación, inspección, mantenimiento, grupo, ubicación e invitación de usuario. Esto no sustituye el recorrido con lector de pantalla ni la aceptación de usuarios.
 
 **Validación accesible de formularios:** build de TypeScript/producción correcto. En navegador, el envío incompleto de una asignación enfocó el selector de activo, lo marcó inválido y relacionó la alerta con el control; el envío incompleto de una orden enfocó el área de novedad y anunció el mismo patrón. Los formularios compartidos ya tienen guarda síncrona contra doble envío y estado visual de guardado mientras resuelven operaciones asíncronas.
+
+**Fechas locales:** los valores iniciales de los campos `date` y `datetime-local` ahora se componen con año, mes, día y hora locales en lugar de recortar una cadena UTC. Pendiente de incluirse en la única verificación global final solicitada para este cierre del refinamiento.
 
 La ejecución permanece abierta: los ítems completados cubren partes de las etapas 2 a 6, pero aún faltan criterios de cierre y aceptación humana; no representan la finalización del plan completo.
